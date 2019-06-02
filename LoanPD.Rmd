@@ -1,0 +1,168 @@
+---
+title: "Loan Payback Prediction"
+author: "May Tran"
+date: "May 29, 2018"
+output: word_document
+---
+
+```{r}
+library(car)
+library(tidyverse)
+library(caret)
+library(GGally)
+library(ROCR)
+library(ggplot2)
+library(RcmdrMisc)
+library(caTools)
+loans <- read.csv("C:/Stuff/JobApplication/PD/loan_data.csv")
+summary(loans)
+```
+
+# Investigate data types of the columns
+
+```{r}
+str(loans)
+```
+
+# Transfer the data type to correct format
+
+```{r}
+loans$days.with.cr.line <- as.numeric(loans$days.with.cr.line)
+loans$delinq.2yrs <- as.numeric(loans$delinq.2yrs)
+loans$inq.last.6mths <- as.numeric(loans$inq.last.6mths)
+loans$long_term <- as.numeric(loans$long_term)
+```
+
+# Understand data: use ggplot to visualize
+
+```{r}
+ggplot(data = loans,aes(fico)) + geom_histogram(aes(fill=as.factor(loans$notfullypaid)), color = 'black') + theme_bw()
+```
+
+The higher fico is, the less likely the loan is default 
+
+
+```{r}
+ggplot(data = loans, aes(fico)) + geom_histogram(aes(fill = as.factor(credit.policy)), color = 'black') + theme_bw()
+```
+
+The higher the fico is, the more likely the loan is accepted by the credit policy. 
+
+
+```{r}
+ggplot(data = loans,aes(dti)) + geom_histogram(aes(fill = as.factor(notfullypaid)),color = "black") +theme_bw()
+```
+
+```{r}
+ggplot(data = loans, aes(int.rate,fico)) + geom_point() + stat_smooth()
+ggplot(data = loans, aes(int.rate)) + geom_histogram(aes(fill = purpose), color = "black")
+ggplot(data = loans, aes(int.rate)) + geom_histogram(aes(fill = as.factor(notfullypaid)), color = "black")
+
+```
+The higher fico is the lower the interest is
+Interest rate seems irrelevant to loan purpose and loan payment ability
+
+```{r}
+set.seed(123)
+sample <- sample.int(n = nrow(loans), size = floor(.9*nrow(loans)), replace = F)
+loanstrain <- loans[sample,]
+loanstest <- loans[-sample,]
+```
+
+# Model 1: How purpose relates to loan payment
+
+```{r}
+mod1 <- glm(notfullypaid ~ purpose, data = loanstrain)
+summary(mod1)
+mod1rsquared <- (mod1$null.deviance- mod1$deviance)/mod1$null.deviance
+mod1rsquared
+```
+
+# Model 2: How installment amount, annual income, and interest rate relate to loan payment ability
+
+```{r}
+mod2 <- glm(notfullypaid ~ installment + log.annual.inc + int.rate, data = loanstrain)
+summary(mod2)
+mod2rsquared <- (mod2$null.deviance- mod2$deviance)/mod2$null.deviance
+mod2rsquared
+```
+
+
+```{r}
+str(loanstrain)
+```
+
+# Model 3: How all variables impact the loan payment ability
+
+```{r}
+mod3 <- glm(notfullypaid ~ ., data = loanstrain)
+summary(mod3)
+mod3rsquared <- (mod3$null.deviance- mod3$deviance)/mod3$null.deviance
+mod3rsquared
+```
+
+# Reduced Model 3: Use stepwise to remove insignificant variables from Model 3
+
+```{r}
+redmod3 <- stepwise(mod3)
+summary(redmod3)
+redmod3rsquared <- (redmod3$null.deviance- redmod3$deviance)/redmod3$null.deviance
+redmod3rsquared
+```
+
+# Model 4: Manually reduced model: From Reduced model 3, select statistically significant variables
+
+```{r}
+mod4 <- glm(notfullypaid ~ credit.policy + installment + log.annual.inc + fico + revol.bal + inq.last.6mths, data = loanstrain)
+summary(mod4)
+mod4rsquared <- (mod4$null.deviance- mod4$deviance)/mod4$null.deviance
+mod4rsquared
+
+```
+
+# Final Model: Reduced Model 3 is chosen to predict the probability of not fully payment
+
+```{r}
+loanstrain$Mod3PredTrain <- predict(redmod3, newdata = loanstrain, type = "response")
+loanstrain$Mod3ClassTrain <- ifelse(loanstrain$Mod3PredTrain > 0.5, 1,0)
+confusionMatrixTrain <- table(loanstrain$Mod3ClassTrain, loanstrain$notfullypaid)
+confusionMatrixTrain
+```
+
+```{r}
+AccuracyTrain <- (7214+10)/(7214+16+1389+10)
+AccuracyTrain
+```
+
+```{r}
+loanstest$Mod3PredTest <- predict(redmod3, newdata = loanstest, type = "response")
+loanstest$Mod3ClassTest <- ifelse(loanstest$Mod3PredTest > 0.5, 1,0)
+confusionMatrixTest <- table(loanstest$Mod3ClassTest, loanstest$notfullypaid)
+confusionMatrixTest
+```
+
+```{r}
+AccuracyTest <- (814+1)/(814+1+142+11)
+AccuracyTest
+```
+
+# Prediction on original data
+
+```{r}
+loans$Mod3Pred <- predict(redmod3, newdata = loans, type = "response")
+loans$Mod3Class <- ifelse(loans$Mod3Pred > 0.5, 1,0)
+confusionMatrix <- table(loans$Mod3Class, loans$notfullypaid)
+confusionMatrix
+```
+
+```{r}
+Accuracy <- (8028+17)/(8028+17+1522+11)
+Accuracy
+```
+
+# New loans data with prob and class fields
+
+```{r}
+str(loans)
+```
+
