@@ -14,7 +14,7 @@ library(ROCR)
 library(ggplot2)
 library(RcmdrMisc)
 library(caTools)
-loans <- read.csv("C:/Stuff/JobApplication/PD/loan_data.csv")
+loans <- read.csv(".../loan_data.csv")
 summary(loans)
 ```
 
